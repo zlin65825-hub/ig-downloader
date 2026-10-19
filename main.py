@@ -9,6 +9,21 @@ import threading
 import time
 from pathlib import Path
 
+# p4a 打包的 Python 没有 _lzma 模块，而 instaloader 会 import lzma：
+# 这里放一个用 gzip 顶替的替身（我们不保存元数据，用不到真正的 lzma）
+try:
+    import lzma  # noqa: F401
+except ImportError:
+    import gzip
+    import sys
+    import types
+
+    _m = types.ModuleType("lzma")
+    _m.CHECK_NONE = 0
+    _m.LZMAError = type("LZMAError", (Exception,), {})
+    _m.open = lambda filename, mode="rb", **kw: gzip.open(filename, mode)
+    sys.modules["lzma"] = _m
+
 try:
     import certifi
 
@@ -63,6 +78,22 @@ def find_cjk_font():
     return None
 
 
+class _QuietLogger:
+    """让 yt-dlp 不碰 sys.stderr（Kivy 的 stderr 会让它报错）。错误仍会通过异常抛出。"""
+
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        pass
+
+
 def download_video(url, out, cookies, progress):
     import yt_dlp
 
@@ -78,6 +109,7 @@ def download_video(url, out, cookies, progress):
         "format": "b[ext=mp4]/b",
         "restrictfilenames": True,
         "cachedir": False,
+        "logger": _QuietLogger(),
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
